@@ -61,7 +61,7 @@ sharedPath <- "/isilon/cfia-ottawa-fallowfield/users/girouxeml/PIRL_working_dire
 analysis   <- "salmonella_rnaseq/"
 sharedPathAn <- paste(sharedPath, analysis, sep = "")
 
-imageDirPath <- paste(sharedPathAn, "salmonellaRmd_data/", sep = "")
+imageDirPath <- "/isilon/cfia-ottawa-fallowfield/users/girouxeml/GitHub_Repos/r_environments/Salmonella_RNA-Seq/"
 baseImage    <- "salmonella_processing_28May2019.RData"
 
 save.image(paste(imageDirPath, baseImage, sep = ""))
@@ -150,11 +150,6 @@ prinSeqGraphPath <- paste(progPath, "miniconda/envs/prinseq/bin/prinseq-graphs-n
 # Note - to get prinSeqGraphs to work, I had to modify the version that omits Statistics::PCA, and specify the lib to Cairo and JSON at the top of the executable, replacing the call-outs to use Cairo and use JSON that are in the packaged executable.
 # See: https://alvinalexander.com/perl/edu/articles/pl010015/
 
-#condaPath <- paste(progPath, "miniconda/condabin/conda", sep = "")
-#cmd <- paste("conda -h ")
-#system(cmd)
-# system2(condaPath)
-
 saltyRefPathOriginalName    <- paste(projRefPath, "saltyp_GCA_000006945.2_ASM694v2_genomic.fna", sep = "")
 saltyRefPath    <- paste(projRefPath, "saltyp_ref.fa", sep = "")
 saltygff3Path   <- paste(projRefPath, "saltyp_GCA_000006945.2_ASM694v2_genomic.gff", sep = "")
@@ -170,11 +165,6 @@ salenProteins   <- paste(projRefPath, "salent_GCA_000009505.1_ASM950v1_protein.f
 # /opt/bio/cufflinks/bin/gffread input.gff -T -o output.gtf
 saltygtfPath    <- paste(projRefPath, "saltyp_GCA_000006945.2_ASM694v2_genomic.gtf", sep = "")
 salengtfPath   <- paste(projRefPath, "salent_GCA_000009505.1_ASM950v1_genomic.gtf", sep = "")
-
-# Obtain the following by replacing all CDS features to exon features in the gtf files (after you copy them)
-# sed -i 's/CDS/exon/g' saltyp_GCA_000006945.2_ASM694v2_genomic.allExon.gtf
-saltygtfExonPath    <- paste(projRefPath, "saltyp_GCA_000006945.2_ASM694v2_genomic.allExon.gtf", sep = "")
-salengtfExonPath   <- paste(projRefPath, "salent_GCA_000009505.1_ASM950v1_genomic.allExon.gtf", sep = "")
 ```
 
 **Checking for Adapter Sequences**     
@@ -232,10 +222,6 @@ metadataRawPairs <- dcast(data = metadata, LibraryName + FilenamePrefix + Experi
                           + RNASeq_Replicate + RNA_Replicate + ScientificName
                           ~ Read_Direction, value.var = "BaseCallsName", FUN = c)
 
-metadataRawPairs$ShortName <- paste(metadataRawPairs$SppAbbr,
-                                    metadataRawPairs$Experiment, 
-                                    metadataRawPairs$Condition, sep = ".")
-
 metadataRawPairs$ExpUnit <- sub("-DIP_.*", "", metadataRawPairs$FilenamePrefix)
 metadataRawPairs$FastqPath <- pathFastq
 ```
@@ -244,10 +230,8 @@ Run FastqPairedEndValidator for the first time on the raw read pairs:
 *** Note: Fastq.gz need to be uncompressed to run.
 ```{r}
 prefix <- "N_Validator"
-
 cmd <-  with (metadataRawPairs, paste(fastqPEValPath, 
                                       " ", pathFastq, R1, " ", pathFastq, R2, sep = ""))
-
 suffix <- ".sub"; cat(bashDirections); MakeQsubs(cmd, prefix, suffix)
 ```
 
@@ -407,35 +391,11 @@ fastqcr::qc_report(qc.path = cutAdaptQCDir,
                    interpret = TRUE, preview = TRUE)
 ```
 
-*** Note - a significan portion of the reasds do not overlap - and merging and only using merged reads would mean losing a significant amount of data. This is because only 125 bp x 2, 250 cycles of sequencing were performed using the HiSeq. For this reason, the unmerged, processed reads will be used instead of the merged reads.
+*** Note - a significant portion of the reasds do not overlap - and merging and only using merged reads would mean losing a significant amount of data. This is because only 125 bp x 2, 250 cycles of sequencing were performed using the HiSeq. For this reason, the unmerged, processed reads will be used instead of the merged reads.
 
 Record the name of the adapRem fastq files output from processing with SeqPrep:
 ```{r}
 adapRemFastq <- list.files(path = cutAdaptDir, pattern = "cut.fastq.gz")
-```
-
-User to specify the time-points, if any, for the RNA-Seq experiment:
-```{r}
-timePoints <- c("0")
-```
-
-PrinSeq Options Setting:
-```{r}
-nmax           <- "-ns_max_n 1"
-trimLeft       <- "-trim_left 0"
-trimRight      <- "-trim_right 10"
-trimTailLeft   <- "-trim_tail_left 5"
-trimTailRight  <- "-trim_tail_right 5"
-trimQualWindow <- "-trim_qual_window 3"
-trimQualType   <- "-trim_qual_type mean"
-trimQualRight  <- "-trim_qual_right 30" #consider 30 after running with Andre's modified gff.
-trimQualLeft   <- "-trim_qual_left 30"
-trimQualRule   <- "-trim_qual_rule lt"
-lcMethod       <- "-lc_method dust"
-lcThreshold    <- "-lc_threshold 7"
-#outGood        <- "processed_merged" Define by user
-outBad         <- " null"
-minLen         <- "-min_len 60"
 ```
 
 *** Note, for HiSeq I didn't remove the single reads because I am still assessing results of merging 
@@ -462,14 +422,12 @@ for(k in 1:length(deleteFastq)) {
 
 ```{r}
 library("reshape2")
-
 metadataRawPairs$R1cut <- paste(metadataRawPairs$FilenamePrefix, "Fcut.fastq", sep = "_")
 metadataRawPairs$R2cut <- paste(metadataRawPairs$FilenamePrefix, "Rcut.fastq", sep = "_")
 ```
 
 ```{r}
 gunzipFastq <- list.files(path = cutAdaptDir, pattern = "*.fastq.gz$")
-
 for(k in 1:length(gunzipFastq)) {
   cmd <- paste("gunzip ", cutAdaptDir, gunzipFastq[k], sep = "")
   system(cmd)
@@ -523,33 +481,9 @@ for(k in 1:nrow(metadataRawPairs)){
   metadataRawPairs$AdapRemGraphs <- paste(metadataRawPairs$FilenamePrefix, ".adapRem.gd", sep = "") 
 }
 ```
-
-Step 2: html file generation:     
-     
-Note: Generation of HTML, or any PNG, fails due to problem not using Cairo:ImageSurface 'create' object, and can't succeed in installing library properly - see edited perl script: ~/prog/miniconda/envs/prinseq/bin/prinseq-graphs-noPCA.pl for script with edits and attempts to fix.     
-     
-Other option is to load them on PrinSeq web to get htmls from graph files.
-```{r}
-prefix2 <- "P2_PrinSeq_rawHtmlSub"
-cmd <- MakePrinSeqHTML(metadataRawPairs, prefix, metadataRawPairs$AdapRemGraphs)
-
-suffix <- ".sub"; cat(bashDirections); MakeQsubs(cmd, prefix2, suffix)
-```
+Load graph (.gd) files on PrinSeq webserver to see quality reports.
 
 Note: There is a problem with PrinSeq and the number of reads going in for processing are almost all removed in the output. Trying Trimmomatic instead.      
-     
-Pre-Processing of Merged Reads using PrinSeq::
-For the pre-processing with PrinSeq we have three steps, with three sets of qsubs each:
-1. Processing input adapter-removed reads with the PrinSeq trim and filtering options
-2. Generating graph files of the processed reads
-3. Generating html files using the graph files to visualize the outputs
-For each set of qsubs, the .log, .gd, and .html outputs are sent to the first folder that also has 
-the first stage qsub and bash files. The processed reads are output to the pathfastq folder.
-PrinSeq Processing of merged reads:
-First stage of quality pre-processing with PrinSeq:
-
-*** Note: There is a problem with script - look at cutadapted fastq and see that there are a lot of sequences, but PrinSeq reports so few remaining. i.e., 3128-42-DIP_1_1 indicates 13912123 sequences, but PrinSeq report says that there are only 5 sequences! I checked this using the command: awk '{s++}END{print s/4}' file.fastq    
-     
 1-1. Filter adapRem.fastq output from Cutadapt by quality.
 ```{r}
 trimmoPath <- "/home/CFIA-ACIA/girouxeml/prog/miniconda/envs/trimmomatic/bin/trimmomatic"
@@ -643,22 +577,12 @@ metadataRawPairs$refGTFPath <- metadataRawPairs$SppAbbr
 metadataRawPairs$refGTFPath <- sub("Sent", salengtfPath, metadataRawPairs$refGTFPath)
 metadataRawPairs$refGTFPath <- sub("Styp", saltygtfPath, metadataRawPairs$refGTFPath)
 
-metadataRawPairs$refGTFExonsPath <- metadataRawPairs$SppAbbr
-metadataRawPairs$refGTFExonsPath <- sub("Sent", salengtfExonPath, metadataRawPairs$refGTFExonsPath)
-metadataRawPairs$refGTFExonsPath <- sub("Styp", saltygtfExonPath, metadataRawPairs$refGTFExonsPath)
-
 metadataRawPairs$bowind <- metadataRawPairs$SppAbbr
 metadataRawPairs$bowind <- sub("Sent", "salent_ref", metadataRawPairs$bowind)
 metadataRawPairs$bowind <- sub("Styp", "saltyp_ref", metadataRawPairs$bowind)
 ```
 
-Only way to fix name pairing issues is to omit using the single unpaired reads:    
-Except for 1, 5, 9, 10, 17, 22 that worked without error, I kept getting TopHat2 errors about "Read pairing issues detected" and htseq errors about " claims to have an aligned mate which could not be found in an adjacent line". FastqPairedEndValidator.pl detected no errors, BBMap's repair.sh changed nothing, also tried picard-tools FixMateInformation, still did not resolve error. Pairs correctly named when using gedit to look at fastq headers. Changed fastq to fasta using fastx tool. Tried changing tophat command format from:      
-      
-From: pairedFwd,pairedRev<space>unpairedFwd,unpairedRev     
-To: pairedFwd,unpairedFwd <space> pairedRev,unpairedRev     
-     
-Still no luck. Only thing that worked was to run command with forward and reverse reads whose pairs still existed, and omit the single, unpaired reads:
+Only way to fix name pairing issues is to omit using the single unpaired reads.:
 ```{r}
 prefix <- "S_TophatQsub"
 node   <- 2
@@ -734,7 +658,11 @@ HTSeq-count for TopHat2 hits:
 Prepare the metadata table for recording TopHat counts:
 ```{r}
 # For paired-end not merged
-metadataRawPairs$countTopHat <- paste(metadataRawPairs$FilenamePrefix, "TopHat2Count", sep = ".")
+metadataRawPairs$countTopHat <- paste(metadataRawPairs$FilenamePrefix, "TopHat2Count_genes_locusTag", sep = ".")
+
+metadataRawPairs$countPath <- paste(sharedPathAn, metadataRawPairs$FilenamePrefix, 
+                                    "/", metadataRawPairs$FilenamePrefix, ".TopHat", topHatDate, "/",
+                                    metadataRawPairs$countTopHat, sep ="")
 ```
 
 Add a column to metadataRawPairs that transforms the RNASeq replicates and RNA replicates into a single value representing "Replicate"
@@ -768,22 +696,27 @@ write.table(finalMetadata, file = paste(sharedPathAn, finalName, sep = ""),
 
 
 Read count with HT-Seq:   
-Great majority of reads classified as 'no_feature'. This is becuase it's only taking type=exon, and the only exon types in the gtf are for RNA, so only the RNA are counted. To capture counts for RNA and CDS, I changed all CDS in the gtf files to exon, and used the idattr transcript_id, since genes and RNA have this. Because bacteria don't have introns, all the cds are exons anyway, and there will not be multiple exons per cds - it's a 1:1 ratio. I want to count RNA so that I can see the amount ribosomal in the reads. The resulting count tables make a lot more sense.
+Great majority of reads classified as 'no_feature'. This is becuase it's only taking type=exon, and the only exon types in the gtf are for RNA, so only the RNA are counted. To capture counts for RNA and CDS, I changed all CDS in the gtf files to exon, and used the idattr transcript_id, since genes and RNA have this. Because bacteria don't have introns, all the cds are exons anyway, and there will not be multiple exons per cds - it's a 1:1 ratio. I want to count RNA so that I can see the amount ribosomal in the reads. The resulting count tables make a lot more sense. Also - include the --additional-attr=gene_name so that an extra column with the gene names is included in the out put - this saves us having to match up transcript_ids and locus_tag names later on.
 ```{r}
 # Set HT-Seq options:
 stranded <- "no"
 MINAQUAL <- 10
-prefix   <- "U_HTSeq_Qsub"
+prefix   <- "U_HTSeq_Qsub-GeneName"
 node     <- 1
 
 cmd <- with(metadataRawPairs,  # For paired-end not merged
             paste("conda activate htseq && ", htseqCountPath, 
                   " -s ", stranded,
                   " -a ", MINAQUAL,
-                  " --idattr=transcript_id ", # removed --type=CDS # I replaced all feature names CDS with EXON (bacteria) # used transcript_id instead of gene_id so that rna were counted.
+                  #" --idattr=transcript_id ", # removed --type=CDS # I replaced all feature names CDS with EXON (bacteria) # used transcript_id instead of gene_id so that rna were counted.
+                  #" --additional-attr=gene_name ",
+                  " --additional-attr=locus_tag ",
+                  " --idattr=ID ",
+                  " --type=gene ", # If not specified, default is exon
                   " ", paste(sharedPathAn, FilenamePrefix, "/", FilenamePrefix,".TopHat", 
                         topHatDate, "/", FilenamePrefix, "_sn.sam ", sep = ""),
-                  refGTFExonsPath, " > ",
+                  # refGTFExonsPath, " > ",
+                  refGFFPath, " > ",
                   paste(sharedPathAn, FilenamePrefix, "/", FilenamePrefix,".TopHat", 
                         topHatDate, "/", metadataRawPairs$countTopHat, sep = ""),  # PE not merged
                         " && conda deactivate", sep = ""))
@@ -794,14 +727,33 @@ To remove the output files after you are done:
 ```{r}
 RemoveQsubTempFiles(sharedPathAn, prefix)
 ```
-# Obtain two tables, one for each species, with first column the gene id, the second column for locus_tag - will need to use this later.
-To retrieve the id and locus_tad for each gene entry, run the following perl command in a terminal, then open with Word, copy to excel,
-filter for those that start with gene, then remove duplicates based on the column that has the gene ids, then copy to gedit and save as txt file.     
-     
-perl -nle '($id)=/ID=([^;]*)/; ($prod)=/locus_tag=([^;]*)/; print "$id\t$prod"' selent.gff > salent.ids.txt     
-     
-     
-*** Note make 2 separate tables, one for Salent, and the other for Saltyp - Critical - because the gene names are different for each of these.
+
+Edit the counts tables:     
+1. Keep only the Locus_tag and count columns     
+2. Remove rows of duplicated locus_tags. to remove rows where there are no counts for a locus_tag - this will also remove duplicate locus_tags since every locus_tag duplication had one of the duplicated locus_tags that have a 0 count.     
+3. Remove the non-informative count summaries at the end of the files.   
+Now we have count tables that use the locus_tags instead of the unhelpful default gene IDs, no rRNAs, and no extra summery counts at the end to remove.
+```{r}
+for(i in 1:length(metadataRawPairs$countPath)){
+  tbl <- read.table(metadataRawPairs$countPath[i], sep = "\t", header = FALSE, colClasses = c(V1="NULL"))
+  tbl2 <- tbl[is.finite(rowSums(log(tbl[-1]))),]
+  tbl2[tbl2==""] <- NA
+  tbl2 <- na.omit(tbl2)
+  write.table(tbl2, file = paste(sharedPathAn, metadataRawPairs$FilenamePrefix[i], "/", 
+                                 metadataRawPairs$FilenamePrefix[i], ".TopHat", topHatDate, "/",
+                                 metadataRawPairs$countTopHat[i], "_rowsWnoneSkipped", sep = ""),
+              append = FALSE, sep = "\t", row.names = FALSE, na = )
+  }
+```
+
+Add the path tot he edited count tables to the metadata table:
+```{r}
+metadataRawPairs$finalCountsPath <- paste(sharedPathAn, metadataRawPairs$FilenamePrefix, "/", 
+                                          metadataRawPairs$FilenamePrefix, ".TopHat", topHatDate, "/",
+                                          metadataRawPairs$countTopHat, "_rowsWnoneSkipped", sep = "")
+```
+
+Make 2 separate tables, one for Salent, and the other for Saltyp - Critical - because the gene names/locus tags are different.
 ```{r}
 library(data.table)
 dt <- as.data.table(metadataRawPairs)
@@ -812,94 +764,26 @@ saltypMetaDt <- dt["Styp"]
 # Identify the count files and read them into R using readDGE:
 library("edgeR")
 # Turn the count of the list into a data.frame
-countsSent <- readDGE(paste(sharedPathAn, salentMetaDt$FilenamePrefix, 
-                        "/", salentMetaDt$FilenamePrefix, ".TopHat", topHatDate, "/",
-                        salentMetaDt$countTopHat, sep =""))$counts
+countsSent <- readDGE(salentMetaDt$finalCountsPath)$counts
+countsStyp <- readDGE(saltypMetaDt$finalCountsPath)$counts
 
-countsStyp <- readDGE(paste(sharedPathAn, saltypMetaDt$FilenamePrefix, 
-                        "/", saltypMetaDt$FilenamePrefix, ".TopHat", topHatDate, "/",
-                        saltypMetaDt$countTopHat, sep =""))$counts
 # Simplify the column names to remove full path and keep only FilenamePrefix:
 colnames(countsSent) <- basename(colnames(countsSent))
 colnames(countsStyp) <- basename(colnames(countsStyp))
 
-write.table(countsSent, file = file.path(sharedPathAn, "sent_counts_readDGE_TopHat.annotated.csv"),
+write.table(countsSent, file = file.path(sharedPathAn, "sent_counts_GenesOnly_readDGE_TopHat.annotated.csv"),
             sep = ",", row.names = TRUE, col.names = NA, quote = FALSE) 
 
-write.table(countsStyp, file = file.path(sharedPathAn, "styp_counts_readDGE_TopHat.annotated.csv"),
+write.table(countsStyp, file = file.path(sharedPathAn, "styp_counts_GenesOnly_readDGE_TopHat.annotated.csv"),
             sep = ",", row.names = TRUE, col.names = NA, quote = FALSE) 
 ```
 
-Try fixing gene names here before continuing??
-# Obtain two tables, one for each species, with first column the gene id, the second column for locus_tag - will need to use this later.
-To retrieve the id and locus_tad for each gene entry, run the following perl command in a terminal, then open with Word, copy to excel,
-filter for those that start with gene, then remove duplicates based on the column that has the gene ids, then copy to gedit and save as txt file.      
-      
-perl -nle '($id)=/ID=([^;]*)/; ($prod)=/locus_tag=([^;]*)/; print "$id\t$prod"' selent.gff > salent.ids.txt      
-     
-Below we get the headers of transcripts from the IDs text files we just created then clean them up so that we get just the Locus tags for each gene.
-```{r}
-library(data.table)
-# Transcript files to extract locus_tag names from for each species:
-tempSalenTrans <- readDNAStringSet(salenTranscript)
-tempSaltypTrans <- readDNAStringSet(saltyTranscript)
-
-# Locus_tag gene IDs text files:
-sentIDs <- fread(paste(projRefPath, "salent.ids.txt", sep = ""), header = FALSE)
-stypIDs <- fread(paste(projRefPath, "saltyp.ids.txt", sep = ""), header = FALSE)
-
-# Take a look at the naming structures of the transcripts to determine how to retrieve locus_tags:
-names(tempSalenTrans)[1:5]
-names(tempSaltypTrans)[1:5] # This one is different from the Salent species above.
-
-# Extract the locus_tag names from the transcript headers for each species:
-# For salent:
-namesSalenTrans <- sub("] \\[db_xref.*$", "", names(tempSalenTrans))
-namesSalenTrans[1] # note how locus_tag is at the end now.
-namesSalenTrans <- sub("^.*locus_tag=", "", namesSalenTrans)
-namesSalenTrans[1] # Now it's fixed, but there are others formatted differently:
-namesSalenTrans[265] # Note the format of this entry
-namesSalenTrans <- sub("\\].*$", "", namesSalenTrans)
-namesSalenTrans[265:365]
-
-# For saltyp:
-namesSaltypTrans <- sub("] \\[db_xref.*$", "", names(tempSaltypTrans))
-namesSaltypTrans[1] # Note how locus_tag is in the middle in this one
-namesSaltypTrans <- sub("^.*locus_tag=", "", namesSaltypTrans)
-namesSaltypTrans[1] # Now the pattern before the locus_tag is removed
-namesSaltypTrans <- sub("\\].*$", "", namesSaltypTrans)
-namesSaltypTrans[1] # Only the locus_tag remains
-namesSaltypTrans[265:365]
-```
-Now we need to create a table that has a column for the gene names and one column for the matching locus tag:
-```{r}
-
-```
-
-
+Filter weakly-expressed features without at least 1 read per million in the n of the samples, where n is the size of the smallest group of replicates (here, n = 1 for the single knockdown - 8 - group)
 ```{r}
 library("Biostrings")
 library("edgeR")
 library("reshape2")
-# Rows common to both Strain count tables, and needing to be removed:
-rowsRemove <- c("__alignment_not_unique",
-                "__ambiguous",
-                "__no_feature",
-                "__not_aligned",
-                "__too_low_aQual")
 
-# For salent:
-#Check that the rows specified from the last rows of the table include all and only the RNA genes:
-row.names(countsSent)[4325:4435]
-rowsRemoveSent <- row.names(countsSent)[4325:4435] # These are unwanted ribosomal genes 
-countsSent <- countsSent[-which(rownames(countsSent) %in% c(rowsRemoveSent, rowsRemove)), ]
-
-# For saltyp:
-row.names(countsStyp)[4554:4676]
-rowsRemoveStyp <- row.names(countsStyp)[4554:4676] # These are unwanted ribosomal genes 
-countsStyp <- countsStyp[-which(rownames(countsStyp) %in% c(rowsRemoveStyp, rowsRemove)), ]
-
-# Filter weakly-expressed features without at least 1 read per million in the n of the samples, where n is the size of the smallest group of replicates (here, n = 1 for the single knockdown - 8 - group)
 cpmsSent <- cpm(countsSent)  # counts per million
 cpmsStyp <- cpm(countsStyp)  # counts per million
 
@@ -909,9 +793,10 @@ keep <- rowSums(cpmsStyp >1) >= 1
 countsStyp  <- countsStyp[keep,]
 
 # Visualize and inspect the count table:
-head( countsSent[,order(salentMetaDt$Condition)], 5)
-head( countsStyp[,order(saltypMetaDt$Condition)], 5)
+head(countsSent[,order(salentMetaDt$Condition)], 5)
+head(countsStyp[,order(saltypMetaDt$Condition)], 5)
 ```
+
 ```{r}
 # Create a DGEList object (edgeR's container for RNA-seq count data):
 dSent <- DGEList(counts = countsSent, group = salentMetaDt$Condition)
@@ -921,6 +806,7 @@ dStyp <- DGEList(counts = countsStyp, group = saltypMetaDt$Condition)
 dSent <- calcNormFactors(dSent)
 dStyp <- calcNormFactors(dStyp)
 ```
+
 Inspect the relationships between samples using a multidimensional scaling (MDS) plot:
 ```{r}
 # For S. enteriditis:
@@ -958,6 +844,7 @@ plotMDS(dStyp, labels = saltypMetaDt$Condition,
         cex = 1, main = "Salmonella typhimurium MDS") 
 dev.off()
 ```
+
 Estimate tagwise dispersion (simple design):
 ```{r}
 dSent <- estimateCommonDisp(dSent)
@@ -972,6 +859,7 @@ Create a visual representation of the mean-variance relationship using the plotM
 plotMeanVar(dSent, show.tagwise.vars = TRUE, NBline = TRUE)
 plotBCV(dSent)
 ```
+
 ```{r}
 # For S. typhimurium
 plotMeanVar(dStyp, show.tagwise.vars = TRUE, NBline = TRUE)
@@ -1057,268 +945,66 @@ write.csv(ttSent$table, file = paste(sharedPathAn, resultsSent, "/sent_topTags_e
 write.csv(ttStyp$table, file = paste(sharedPathAn, resultsStyp, "/styp_topTags_edgeR.csv", sep = ""))
 ```
 
-#####################################################################
-############### Old                                  ################
-#####################################################################
-Only for this set of data, extract control columns based on their names.
+     
+# Below chunks are not runable yet.      
+# The chunks below need editing to work - they rely on fixing an issue with the gene lengths. 
+Ideas for the following to extract genelength for names being locus_tags: https://raw.githubusercontent.com/tgirke/GEN242/gh-pages/_vignettes/09_Rsequences/Rsequences.Rmd
 ```{r}
-# List the controls that you want to drop from count analyses, if there are none do: c("","") 
-# controlToDrop <- c("","") 
-# tempCountsTopHat <- data.frame(countsTopHat)
-# colnames(tempCountsTopHat) <- colnames(countsTopHat)
-# countsTopHatDf   <- tempCountsTopHat[, !(colnames(tempCountsTopHat) %in% controlToDrop)]
+library(Biostrings)
+sentFa <- readDNAStringSet(salenRefPath)
+sentGff <- import(salengff3Path)
+sentGffGene <- sentGff[values(sentGff)[,"type"]=="gene"]
+sentGene <- DNAStringSet(Views(sentFa[[1]], IRanges(start(sentGffGene), end(sentGffGene))))
+names(sentGene) <- values(sentGffGene)[,"locus_tag"]
 
-controlToDrop <- c("","")
-tempCountsTopHatSent <- data.frame(countsTopHatSent)
-tempCountsTopHatStyp <- data.frame(countsTopHatStyp)
-colnames(tempCountsTopHatSent) <- colnames(countsTopHatSent)
-colnames(tempCountsTopHatStyp) <- colnames(countsTopHatStyp)
-countsTopHatDfSent <- tempCountsTopHatSent[, !(colnames(tempCountsTopHatSent) %in% controlToDrop)]
-countsTopHatDfStyp <- tempCountsTopHatStyp[, !(colnames(tempCountsTopHatStyp) %in% controlToDrop)]
-```
-
-The trick was from here
-http://stackoverflow.com/questions/19321053/sum-together-columns-of-data-frame-based-on-name-type
-Make the names of the columns with different libraries of the same experimental unit identical - some 
-columns have the same name. Then a row sum for each unique name is done. When a library is sequenced 
-twice, the numbers will be added up.
-
-*** Note - we replicates to include for this project, so the folllowing is just a way to go with the script made with Andre.
-```{r}
-library("reshape2")
-# For Salent:
-salentMetaDtOld <- salentMetaDt
-salentMetaDt$ExpUnit <- sub("-DIP_.*", "", salentMetaDt$FilenamePrefix)
-
-countsTopHatDfSent$gene <- rownames(countsTopHatDfSent)
-countsTopHatMeltSent <- melt(countsTopHatDfSent)
-
-colnames(countsTopHatMeltSent)[2] <- "FilenamePrefix"
-
-# For paired-end not merged:
-dfSent <- merge(countsTopHatMeltSent, salentMetaDt[,c("FilenamePrefix", "ExpUnit", "Replicate")], 
-            by = "FilenamePrefix", all.x = TRUE)
-
-countsTopHatSumSent <- dcast(data = dfSent[,c("gene", "value", "ExpUnit", "Replicate", "FilenamePrefix")], 
-                         gene ~ ExpUnit, sum, value.var = "value")
-
-rownames(countsTopHatSumSent) <- countsTopHatSumSent$gene
-countsTopHatSumSent$gene      <- NULL
-
-# Now for Saltyp:
-saltypMetaDtOld <- saltypMetaDt
-saltypMetaDt$ExpUnit <- sub("-DIP_.*", "", saltypMetaDt$FilenamePrefix)
-
-countsTopHatDfStyp$gene <- rownames(countsTopHatDfStyp)
-countsTopHatMeltStyp <- melt(countsTopHatDfStyp)
-colnames(countsTopHatMeltStyp)[2] <- "FilenamePrefix"
-
-# For paired-end not merged:
-dfStyp <- merge(countsTopHatMeltStyp, saltypMetaDt[,c("FilenamePrefix", "ExpUnit", "Replicate")], 
-            by = "FilenamePrefix", all.x = TRUE)
-
-countsTopHatSumStyp <- dcast(data = dfStyp[,c("gene", "value", "ExpUnit", "Replicate", "FilenamePrefix")], 
-                         gene ~ ExpUnit, sum, value.var = "value")
-rownames(countsTopHatSumStyp) <- countsTopHatSumStyp$gene
-countsTopHatSumStyp$gene      <- NULL
-```
-
-Normalization after removing rDNA data.  Not sure if this is the best approach.
-```{r}
-library("Biostrings")
-library("edgeR")
-library("reshape2")
-# For salent:
-#Check that the rows specified from the last rows of the table include all and only the RNA genes:
-row.names(countsTopHatSumSent)[4330:4435]
-
-rowsRemove1Sent <- row.names(countsTopHatSumSent)[4330:4435] # These are unwanted ribosomal genes 
-rowsRemove2Sent  <- c("__alignment_not_unique",
-                      "__ambiguous",
-                      "__no_feature",
-                      "__not_aligned",
-                      "__too_low_aQual")
-
-countsTopHatGenesSent <- countsTopHatSumSent[-which(rownames(countsTopHatSumSent) 
-                                                    %in% c(rowsRemove1Sent, rowsRemove2Sent)), ]
-# To see the proportion of reads not ribosomal compared to ribosomal and all else (for fun):
-countsTopHatDfSent$gene <- NULL
-mean(colSums(countsTopHatGenesSent)/colSums(countsTopHatSumSent))
-# [1] 0.6730904
-cpmsSentTopHatGenes <- cpm(countsTopHatGenesSent)  # counts per million
-
-# For saltyp:
-row.names(countsTopHatSumStyp)[4559:4676]
-rowsRemove1Styp <- row.names(countsTopHatSumStyp)[4559:4676] # These are unwanted ribosomal genes 
-rowsRemove2Styp  <- c("__alignment_not_unique",
-                      "__ambiguous",
-                      "__no_feature",
-                      "__not_aligned",
-                      "__too_low_aQual")
-
-countsTopHatGenesStyp <- countsTopHatSumStyp[-which(rownames(countsTopHatSumStyp) 
-                                                    %in% c(rowsRemove1Styp, rowsRemove2Styp)), ]
-
-# To see the proportion of reads not ribosomal compared to ribosomal and all else (for fun):
-countsTopHatDfStyp$gene <- NULL
-mean(colSums(countsTopHatGenesStyp)/colSums(countsTopHatSumStyp))
-# [1] 0.6945043
-cpmsStypTopHatGenes <- cpm(countsTopHatGenesStyp)  # counts per million
-```
-# Obtain two tables, one for each species, with first column the gene id, the second column for locus_tag - will need to use this later.
-To retrieve the id and locus_tad for each gene entry, run the following perl command in a terminal, then open with Word, copy to excel,
-filter for those that start with gene, then remove duplicates based on the column that has the gene ids, then copy to gedit and save as txt file.
-
-perl -nle '($id)=/ID=([^;]*)/; ($prod)=/locus_tag=([^;]*)/; print "$id\t$prod"' selent.gff > salent.ids.txt
-
-```{r}
-library(data.table)
-# Transcript files to extract locus_tag names from for each species:
-tempSalenTrans <- readDNAStringSet(salenTranscript)
-tempSaltypTrans <- readDNAStringSet(saltyTranscript)
-
-# Locus_tag gene IDs text files:
-sentIDs <- fread(paste(projRefPath, "salent.ids.txt", sep = ""), header = FALSE)
-stypIDs <- fread(paste(projRefPath, "saltyp.ids.txt", sep = ""), header = FALSE)
-
-# Take a look at the naming structures of the transcripts to determine how to retrieve locus_tags:
-names(tempSalenTrans)[1:5]
-names(tempSaltypTrans)[1:5] # This one is different from the Salent species above.
-
-# Extract the locus_tag names from the transcript headers for each species:
-# For salent:
-namesSalenTrans <- sub("] \\[db_xref.*$", "", names(tempSalenTrans))
-namesSalenTrans[1] # note how locus_tag is at the end now.
-namesSalenTrans <- sub("^.*locus_tag=", "", namesSalenTrans)
-namesSalenTrans[1] # Now it's fixed, but there are others formatted differently:
-namesSalenTrans[265] # Note the format of this entry
-namesSalenTrans <- sub("\\].*$", "", namesSalenTrans)
-namesSalenTrans[265:365]
-
-# For saltyp:
-namesSaltypTrans <- sub("] \\[db_xref.*$", "", names(tempSaltypTrans))
-namesSaltypTrans[1] # Note how locus_tag is in the middle in this one
-namesSaltypTrans <- sub("^.*locus_tag=", "", namesSaltypTrans)
-namesSaltypTrans[1] # Now the pattern before the locus_tag is removed
-namesSaltypTrans <- sub("\\].*$", "", namesSaltypTrans)
-namesSaltypTrans[1] # Only the locus_tag remains
-namesSaltypTrans[265:365]
-```
-Switch locus_tags with matching gene ids:
-```{r}
-# Sent:
-namesSalenList <- as.data.table(namesSalenTrans)
-namesSaltypList <- as.data.table(namesSaltypTrans)
-```
-
-Take a look:
-```{r}
-sentIDs[1:2]
+stypFa <- readDNAStringSet(saltyRefPath)
+stypGff <- import(saltygff3Path)
+stypGffGene <- stypGff[values(stypGff)[,"type"]=="gene"]
+stypGene <- DNAStringSet(Views(stypFa[[1]], IRanges(start(stypGffGene), end(stypGffGene))))
+names(stypGene) <- values(stypGffGene)[,"locus_tag"]
 ```
 
 ```{r}
-namesSalenList[1:2]
-```
+geneLengthSent <- setNames(width(sentGene), names(sentGene))
+tmpLenSent <- data.table(geneLengthSent)
+tmpLenSent$gene <- names(geneLengthSent)
+colnames(tmpLenSent)[colnames(tmpLenSent)=="geneLengthSent"] <- "width"
+tmpLenSent <- na.omit(tmpLenSent) # remove rows with no width or no locus tag
+length(tmpLenSent$gene)
+# [1] 4206 # This is the number for genes-width pairs in the table
+length(unique(tmpLenSent$gene))
+# [1] 4200 # This is the number of unique genes in the table - there are 6 duplicated ones
 
-Take a look:
-```{r}
-stypIDs[1:2]
-```
+# Note - we can add a column for gene length to the counts table, BUT there are a few genes that have 2 gene length entries for the same locus tag - these may be tRNAs that are made of 2 fragments. The total fragment size is not calculated, so it's not predictable which length for which fragment gets added to the table in the commands below. I'll keep these commands, but not use the table generated until this can be fixed.
+tempSent <- data.frame(countsSent)
+colnames(tempSent) <- colnames(countsSent)
+tempSent$gene <- rownames(tempSent)
+tempSent$width <- rownames(tempSent)
+tempSent <- as.data.table(tempSent)
 
-```{r}
-namesSaltypList[1:2]
-```
+# Match gene width to gene name/locus_tag in the coutns table:
+setkey(tempSent, width)
+setkey(tmpLenSent, gene)
+tempSent[tmpLenSent, width := width]
+tempSent$gene <- rownames(tempSent)
+tempSent$Row.names <- NULL
+tempSent$y <- geneLengthSent
 
-```{r}
-library(data.table)
-# For Sent:
-setDT(namesSalenList)
-setDT(sentIDs)
-sapply(names(namesSalenList), #(or to whichever are the relevant columns)
-       function(cc) namesSalenList[sentIDs, (cc) := #merge, replace
-                                     #need to pass a _named_ vector to 'on', so use setNames
-                                     i.V1, on = setNames("V2", cc)])
-namesTranssent <- as.list(namesSalenList$namesSalenTrans)
-# For Styp:
-setDT(namesSaltypList)
-setDT(stypIDs)
-sapply(names(namesSaltypList), #(or to whichever are the relevant columns)
-       function(cc) namesSaltypList[stypIDs, (cc) := #merge, replace
-                                     #need to pass a _named_ vector to 'on', so use setNames
-                                     i.V1, on = setNames("V2", cc)])
-namesTransstyp <- as.list(namesSaltypList$namesSaltypTrans)
+tempSent2 <- setdiff(tmpLenSent, tempSent$gene) # See note above on fragmented tRNAs that occupy 2 ros or more in the genelengths table.
 
-# Here we are using the sent.ids.txt table to match the id to locus_tag so tie together the gene lengths, which is retrieved using the locus_tag. We haven't updated the table so that the rownames are the locus tag yet.
 
-# Create a vector with names:
-# For Sent:
-geneLengthSent <- setNames(width(tempSalenTrans), namesTranssent)
-geneLengthSent[1]
-temp2sent <- merge(countsTopHatGenesSent, geneLengthSent, by.x = 0, by.y = 0)
-temp2sent[1:3,]
-rownames(temp2sent) <- temp2sent$Row.names
-#temp2sent$Row.names <- NULL
-temp2sent[1:3,]
+# Need to do the same to add gene lengths for saltyp set. 
 
-# For Styp:
-geneLengthStyp <- setNames(width(tempSaltypTrans), namesTransstyp)
-geneLengthStyp[1]
-temp2styp <- merge(countsTopHatGenesStyp, geneLengthStyp, by.x = 0, by.y = 0)
-temp2styp[1:3,]
-rownames(temp2styp) <- temp2styp$Row.names
-#temp2styp$Row.names <- NULL
-temp2styp[1:3,]
 
-# Here I'm getting the gene IDs replaced with the locus_tags.
-# For Sent:
-new <- as.data.table(temp2sent)
-new$locus_tag <- new$Row.names
-names(sentIDs)[1] <- "SppAbbr"
-names(sentIDs)[2] <- "newValue"
-setkey(new, locus_tag)
-setkey(sentIDs, SppAbbr)
-new[sentIDs, locus_tag := newValue]
-
-new[!duplicated(new$locus_tag),]
-new$Row.names <- NULL
-new2 <- as.data.frame(new)
-rownames(new2) <- new2$locus_tag
-new2$Row.names <- NULL
-new2$locus_tag <- NULL
-temp2sent <- new2
-write.table(temp2sent, file = file.path(paste(sharedPathAn, sep = ""), "Sent_readDGEcountsWithGeneLength.csv"),
-            append = FALSE, sep = ",", col.names = NA)
-
-# For Styp:
-new <- as.data.table(temp2styp)
-new$locus_tag <- new$Row.names
-names(stypIDs)[1] <- "SppAbbr"
-names(stypIDs)[2] <- "newValue"
-setkey(new, locus_tag)
-setkey(stypIDs, SppAbbr)
-new[stypIDs, locus_tag := newValue]
-
-new[!duplicated(new$locus_tag),]
-new$Row.names <- NULL
-new2 <- as.data.frame(new)
-rownames(new2) <- new2$locus_tag
-new2$Row.names <- NULL
-new2$locus_tag <- NULL
-temp2styp <- new2
-write.table(temp2styp, file = file.path(paste(sharedPathAn, sep = ""), "Styp_readDGEcountsWithGeneLength.csv"),
-            append = FALSE, sep = ",", col.names = NA)
-```
-rpkm edgeR Salent rna-seq:
-```{r}
+# Until issue with gene length is solved (above), can't do rpkm normalized to gene length here.
+# rpkm edgeR Salent rna-seq:
 summary(temp2sent)
 library("edgeR")
 salent_rpkmCount <- rpkm(temp2sent[,1:4], # All columns except y which is col 5
                          gene.length = temp2sent$y, normalized.lib.sizes = TRUE)
 salent_rpkmCount[1:5,]
-```
 
-rpkm edgeR Salty rna-seq:
-```{r}
+# rpkm edgeR Salty rna-seq:
 summary(temp2styp)
 library("edgeR")
 saltyp_rpkmCount <- rpkm(temp2styp[,1:4], # All columns except y which is col 5
@@ -1326,8 +1012,8 @@ saltyp_rpkmCount <- rpkm(temp2styp[,1:4], # All columns except y which is col 5
 saltyp_rpkmCount[1:5,]
 ```
 
+# Note - below chunk uses normalization based on rpkm AND cpm - whcih we can't do until the genelength duplicate issue is solved (previous chunk)
 Setting up for Differential Analysis: 
-
 Counts per million (cpm) from the gene counts from TopHat: 
 ```{r}
 library("reshape2")
@@ -1361,7 +1047,8 @@ countsStyp$Condition <- factor(countsStyp$Condition, levels = c(condition))
 length(unique(countsStyp$Condition))
 countsStyp[1:5,]
 ```
-Finding potential house-keeping (HK) genes: 
+# To do following, need to fix gene length issue as well.
+Finding potential house-keeping (HK) genes:
 ```{r}
 # For Sent:
 colnames(salent_rpkmCount)
@@ -1392,227 +1079,4 @@ potentialHKStyp <- potentialHKStyp[order(-potentialHKStyp$mean),]
 write.table(potentialHKStyp, 
             file   = file.path(paste(sharedPathAn, sep = ""), "styp_potential_houseKeepingGenes.csv"),
             append = FALSE, sep = ",", col.names = NA)
-```
-
-
-Generating the samples table for each species:
-```{r}
-# For Sent:
-colnames(salent_rpkmCount)
-samplesSent <- data.frame(colnames(salent_rpkmCount))
-colnames(samplesSent)[1] <- "ExpUnit"
-samplesSent$Condition <- samplesSent$ExpUnit
-samplesSent$Condition <- sub("^3346-", "", samplesSent$Condition, ignore.case = FALSE)
-samplesSent$Condition <- sub("_.*$", "", samplesSent$Condition, ignore.case = FALSE)
-samplesSent$Condition <- sub("WT", "Control", samplesSent$Condition, ignore.case = FALSE)
-samplesSent$Treatment <- samplesSent$Condition
-samplesSent$Treatment <- sub("^42", "ko42", samplesSent$Treatment)
-samplesSent$Treatment <- sub("^342", "ko342", samplesSent$Treatment)
-samplesSent$Treatment <- sub("^8", "ko8", samplesSent$Treatment)
-
-# Filter low count genes from Sent:
-raw_countsSent <- temp2sent[,1:4]
-# Need to only filter presence by no more than the number of actual libraries (ExpUnit):
-filterSent <- apply(raw_countsSent, 1, function(x) length(x[x>5]) >=3) # Filtered those at least expressed in 3 of the 4 libraries
-filteredSent <- raw_countsSent[filterSent,]
-head(filteredSent[,order(samplesSent$Condition)],5)
-```
-
-```{r}
-# For Styp:
-colnames(saltyp_rpkmCount)
-samplesStyp <- data.frame(colnames(salent_rpkmCount))
-colnames(samplesStyp)[1] <- "ExpUnit"
-samplesStyp$Condition <- samplesStyp$ExpUnit
-samplesStyp$Condition <- sub("^3346-", "", samplesStyp$Condition, ignore.case = FALSE)
-samplesStyp$Condition <- sub("_.*$", "", samplesStyp$Condition, ignore.case = FALSE)
-samplesStyp$Condition <- sub("WT", "Control", samplesStyp$Condition, ignore.case = FALSE)
-samplesStyp$Treatment <- samplesStyp$Condition
-samplesStyp$Treatment <- sub("^42", "ko42", samplesStyp$Treatment)
-samplesStyp$Treatment <- sub("^342", "ko342", samplesStyp$Treatment)
-samplesStyp$Treatment <- sub("^8", "ko8", samplesStyp$Treatment)
-# Filter low count genes from Styp:
-raw_countsStyp <- temp2styp[,1:4]
-# Need to only filter presence by no more than the number of actual libraries (ExpUnit):
-filterStyp <- apply(raw_countsStyp, 1, function(x) length(x[x>5]) >=3) # Filtered those at least expressed in 3 of the 4 libraries
-filteredStyp <- raw_countsStyp[filterStyp,]
-head(filteredStyp[,order(samplesStyp$Condition)],5)
-```
-```{r}
-library(DESeq2)
-library(edgeR)
-# For Sent:
-#Create a DGEList object (edgeR's container for RNA-seq count data): 
-#dTopHSent = DGEList(counts=raw_countsSent, group=samplesSent$Condition) 
-dTopHSent = DGEList(counts=filteredSent, group=samplesSent$Condition) 
-#Estimate normalization factors using, RNA composition and adjust for read depth: 
-dTopHSent <- calcNormFactors(dTopHSent)
-
-# For Styp:
-#Create a DGEList object (edgeR's container for RNA-seq count data): 
-#dTopHStyp = DGEList(counts=raw_countsStyp, group=samplesStyp$Condition)
-dTopHStyp = DGEList(counts=filteredStyp, group=samplesStyp$Condition) 
-#Estimate normalization factors using, RNA composition and adjust for read depth: 
-dTopHStyp <- calcNormFactors(dTopHStyp)
-```
-
-Inspect the relationships between samples using a multidimensional scaling (MDS) plot, as shown in Figure 4:     
-For Sent:
-```{r}
-results <- "sent_27-May-2019-TopHat-edgeR"
-dir.create(paste(sharedPathAn, results, sep = ""), showWarnings = TRUE, recursive = FALSE)
-pdf(file.path(paste(sharedPathAn, results, sep = ""), "sent_MDS-edgeR_TopHat.pdf")) 
-plotMDS(dTopHSent, labels = samplesSent$Treatment, 
-        col = rainbow(length(levels(factor(samplesSent$Treatment))))[factor(samplesSent$Treatment)], cex = 1, main = "Salmonella enteritidis MDS") 
-dev.off()
-```
-
-
-For Styp:
-```{r}
-resultsStyp <- "styp_27-May-2019-TopHat-edgeR"
-dir.create(paste(sharedPathAn, resultsStyp, sep = ""), showWarnings = TRUE, recursive = FALSE)
-pdf(file.path(paste(sharedPathAn, resultsStyp, sep = ""), "styp_MDS-edgeR_TopHat.pdf")) 
-plotMDS(dTopHStyp, labels = samplesStyp$Treatment, 
-        col = rainbow(length(levels(factor(samplesStyp$Treatment))))[factor(samplesStyp$Treatment)], cex = 1, main = "Salmonella typhimurium MDS") 
-dev.off()
-```
-# ***Over here!!! Need to set this up so that the replicates show - as it is, they are all lumped together per ExpUnit and this needs replicates data specifics:
-```{r}
-# Estimate tagwise dispersion (simple design) using:
-dTopHSent <- estimateCommonDisp(dTopHSent)
-dTopHSent <- estimateTagwiseDisp(dTopHSent)
-
-# Create a visual representation of the mean-variance relationship using the plotMeanVar and plotBCV functions, as follows:
-pdf(file.path(paste(sharedPathAn, results, sep = ""), "sent_27-May-2019-TopHat-edgeR_plotMeanVar.pdf")) 
-plotMeanVar(dTopHSent, show.tagwise.vars = TRUE, NBline = TRUE)
-dev.off()
-
-pdf(file.path(paste(sharedPathAn, results, sep = ""), "sent_27-Jan-2019-TopHat-edgeR_plotBCV.pdf")) 
-plotBCV(dTopHSent)
-dev.off()
-```
-
-# Test for differential expression ('classic' edgeR), as follows:
-```{r}
-#Create a DGEList object (edgeR's container for RNA-seq count data): 
-dTopHSent = DGEList(counts=filteredSent, group=samplesSent$Treatment) 
-#Estimate normalization factors using, RNA composition and adjust for read depth: 
-dTopHSent <- calcNormFactors(dTopHSent)
-dTopHSent <- estimateCommonDisp(dTopHSent)
-
-# error here: Error in .compressDispersions(y, dispersion) : 
-# dispersions must be finite non-negative values
-dTopHSent <- estimateTagwiseDisp(dTopHSent)
-
-deTopHSent <- exactTest(dTopHSent, pair = c("fe", "noFe"))
-toptags_fe_noFe <- topTags(deTopH)
-design <- model.matrix(~group, data=dTopH$samples)
-fit <- glmQLFit(dTopH, design)
-qlf <- glmQLFTest(fit, coef=1:2)
-topTags(qlf)
-
-design2 <- model.matrix(~0+group,data=dTopH$samples)
-fit2 <- glmQLFit(dTopH, design2)
-qlf2 <- glmQLFTest(fit2, coef=1:2)
-topTags(qlf2)
-
-# 3.2.6 ANOVA-like test for any differences - will find any genes that differ between any of the treatment conditions - whether contrasts are non-zero.
-dTopHSent = DGEList(counts=filteredSent, group = samplesSent$Condition) 
-#Estimate normalization factors using, RNA composition and adjust for read depth: 
-dTopHSent <- calcNormFactors(dTopHSent)
-dTopHSent <- estimateCommonDisp(dTopHSent)
-dTopHSent <- estimateTagwiseDisp(dTopHSent)
-deTopHSent <- exactTest(dTopHSent)
-toptags_conditionsSent <- topTags(deTopHSent)
-design3 <- model.matrix(~0+group,data=dTopH$samples)
-fit3 <- glmQLFit(dTopH, design3)
-qlf3 <- glmQLFTest(fit3, coef=1:4)
-topTags(qlf3)
-
-
-Group <- factor(paste(samples$Treatment, samples$Condition, sep = "."))
-cbind(samples, Group=Group)
-design4 <- model.matrix(~0+Group)
-colnames(design4) <- levels(Group)
-fit4 <- glmQLFit(dTopH, design4)
-
-my.contrasts <- makeContrasts(
-  fe_KO_342_vs_fe_WT = fe.342-fe.Control,
-  fe_KO_42_vs_fe_WT = fe.42-fe.Control,
-  fe_KO_8_vs_fe_WT = fe.8-fe.Control,
-  noFe_KO_342_vs_noFe_WT = noFe.342-noFe.Control,
-  noFe_KO_42_vs_noFe_WT = noFe.42-noFe.Control,
-  noFe_KO_8_vs_noFe_WT = noFe.8-noFe.Control,
-  fe_WT_vs_noFe_WT = fe.Control-noFe.Control,
-  levels = design4
-)
-
-qlf <- glmQLFTest(fit4, contrast = my.contrasts[,"fe_KO_342_vs_fe_WT"])
-qlf <- glmQLFTest(fit4, contrast = my.contrasts[,"fe_WT_vs_noFe_WT"])
-```
-
-```{r}
-# edgeR - using glm 
-#Create a design matrix to specify the factors that are expected to affect expression levels: 
-designTopH = model.matrix( ~ Group.1, dat_agg2[c(10:15),]) ## samples is your sample sheet, treatment is a column in the sample sheet 
-designTopH 
-
-### Here it is pH6 - pH2.5 (so positive fold change indicates higher expression in Normal, negative is higher in Affected) 
-#Estimate dispersion values, relative to the design matrix, using the Cox-Reid (CR)-adjusted likelihood 
-d2TopH = estimateGLMCommonDisp(dTopH, designTopH) 
-d2TopH = estimateGLMTrendedDisp(d2TopH, designTopH) 
-d2TopH = estimateGLMTagwiseDisp(d2TopH, designTopH) 
-
-#plot the mean-variance relationship: 
-pdf(file.path(paste(sharedPathAn,results,sep=""),"mean.variance-edgeR_TopHat.pdf")) 
-
-# Plot the relationship between mean expression and variance of expression 
-plotMeanVar(d2TopH, show.tagwise.vars=TRUE, NBline=TRUE,main="MeanVar") 
-
-# Plot the Biological Coefficient of Variation (as opposed to technical coefficient of variation) 
-plotBCV(d2TopH,main="BCV") 
-dev.off() 
-
-#Given the design matrix and dispersion estimates, fit a GLM to each feature: 
-fTopH = glmFit(d2TopH, designTopH) 
-
-#Perform a likelihood ratio test, specifying the difference of interest 
-deTopH = glmLRT(fTopH, coef=2) ## Treatment coefficient 
-
-#Use the topTags function to present a tabular summary of the differential expression statistics 
-ttTopH = topTags(deTopH, n=nrow(dTopH)) ## all tags, sorted 
-head(ttTopH$table) ## Check result 
-table(ttTopH$table$FDR< 0.05) ## the number of "Statistically Differentially Expressed Genes" at an FDR of 0.05 
-
-#Inspect the depth-adjusted reads per million for some of the top differentially expressed genes: 
-ncTopH = cpm(dTopH, normalized.lib.sizes=TRUE) 
-rnTopH = rownames(ttTopH$table) 
-head(ncTopH[rnTopH,order(dat_agg2$Group.1[10:15])],5) 
-
-#Plot the M (log-fold change) versus A (log-average expression) 
-degTopH = rnTopH[ttTopH$table$FDR < .05] 
-pdf(file.path(paste(sharedPathAn,results,sep=""),"smear-edgeR_TopHat-T3.pdf")) 
-plotSmear(dTopH, de.tags=degTopH,main="Smear") 
-dev.off() 
- 
-#Save the result table as a CSV file: 
-write.table(ttTopH$table,file=file.path(paste(sharedPathAn,results,sep=""),"toptags_edgeR_TopHat.annotated-T3.csv"), append = FALSE, sep =",", col.names=NA)                      
-```
-
-**** Over here - Andre, can we delete the next chunk?
-Prepare data for bar plot
-```{r}
-cazyCounts$gene <- rownames(cazyCounts)
-cazyDataMelt <- melt(cazyCounts)
-
-cazyCounts <- merge(cpms, cazyData[,c(1,3,5,6,7,8,9,20)],  by.x = 0, by.y = "SequenceID", all = FALSE, all.y = TRUE)
-
-#countsTopHatMelt <- countsTopHatMelt[countsTopHatMelt$value>0,]
-colnames(countsTopHatMelt)[2] <- "LibraryName"
-df <- merge(countsTopHatMelt, metadataProcessed[,c(1,8)], by= "LibraryName", all.x=TRUE)
-
-countsTopHatSum <- dcast(data = df[,2:4], gene ~ ExpUnit, sum, value.var="value")
-
-cazyCountsT <- t(cazyCounts)
 ```
