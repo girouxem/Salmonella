@@ -32,10 +32,10 @@ if (!requireNamespace("BiocManager"))
 BiocManager::install()
 
 library("BiocManager")
-.cran_packages <- c("ggplot2", "gridExtra", "rprojroot", "data.table", 
-                    "knitr", "kableExtra", "cowplot", "filesstrings",
-                    "tidyr", "reshape2", "kableExtra")
-.bioc_packages <- c("ape", "BiocStyle", "Biostrings", "dada2", "edgeR")
+.cran_packages <- c("cowplot", "data.table", "filesstrings", 
+                    "ggplot2", "gridExtra", "kableExtra", "knitr",
+                    "reshape2", "rprojroot", "rtracklayer", "tidyr")
+.bioc_packages <- c("ape", "BiocStyle", "Biostrings", "BSgenome", "dada2", "edgeR")
 .inst <- .cran_packages %in% installed.packages()
 if(any(!.inst)) {
    install.packages(.cran_packages[!.inst])
@@ -64,8 +64,9 @@ sharedPathAn <- paste(sharedPath, analysis, sep = "")
 imageDirPath <- "/isilon/cfia-ottawa-fallowfield/users/girouxeml/GitHub_Repos/r_environments/Salmonella_RNA-Seq/"
 baseImage    <- "salmonella_processing_28May2019.RData"
 
-save.image(paste(imageDirPath, baseImage, sep = ""))
+#save.image(paste(imageDirPath, baseImage, sep = ""))
 load(paste(imageDirPath, baseImage, sep = ""))
+save.image(paste(imageDirPath, baseImage, sep = ""))
 ```
 
 Many of the commands and approach are from:
@@ -952,7 +953,7 @@ Ideas for the following to extract genelength for names being locus_tags: https:
 ```{r}
 library(Biostrings)
 sentFa <- readDNAStringSet(salenRefPath)
-sentGff <- import(salengff3Path)
+sentGff <- rtracklayer::import(salengff3Path)
 sentGffGene <- sentGff[values(sentGff)[,"type"]=="gene"]
 sentGene <- DNAStringSet(Views(sentFa[[1]], IRanges(start(sentGffGene), end(sentGffGene))))
 names(sentGene) <- values(sentGffGene)[,"locus_tag"]
@@ -964,6 +965,7 @@ stypGene <- DNAStringSet(Views(stypFa[[1]], IRanges(start(stypGffGene), end(styp
 names(stypGene) <- values(stypGffGene)[,"locus_tag"]
 ```
 
+Note - we can add a column for gene length to the counts tables, BUT there are a few genes that have 2 gene length entries for the same locus tag - these may be tRNAs that are made of 2 fragments. The total fragment size is not calculated, so it's not predictable which length for which fragment gets added to the table in the commands below. I'll keep these commands, but not use the table generated until this can be fixed.
 ```{r}
 geneLengthSent <- setNames(width(sentGene), names(sentGene))
 tmpLenSent <- data.table(geneLengthSent)
@@ -975,74 +977,128 @@ length(tmpLenSent$gene)
 length(unique(tmpLenSent$gene))
 # [1] 4200 # This is the number of unique genes in the table - there are 6 duplicated ones
 
-# Note - we can add a column for gene length to the counts table, BUT there are a few genes that have 2 gene length entries for the same locus tag - these may be tRNAs that are made of 2 fragments. The total fragment size is not calculated, so it's not predictable which length for which fragment gets added to the table in the commands below. I'll keep these commands, but not use the table generated until this can be fixed.
 tempSent <- data.frame(countsSent)
 colnames(tempSent) <- colnames(countsSent)
 tempSent$gene <- rownames(tempSent)
 tempSent$width <- rownames(tempSent)
 tempSent <- as.data.table(tempSent)
 
-# Match gene width to gene name/locus_tag in the coutns table:
+# Match gene width to gene name/locus_tag in the counts table:
 setkey(tempSent, width)
 setkey(tmpLenSent, gene)
 tempSent[tmpLenSent, width := width]
-tempSent$gene <- rownames(tempSent)
-tempSent$Row.names <- NULL
-tempSent$y <- geneLengthSent
+tempSent[, `width` := as.integer(`width`)] # Converts width column to integer (character was required to match keys)
 
-tempSent2 <- setdiff(tmpLenSent, tempSent$gene) # See note above on fragmented tRNAs that occupy 2 ros or more in the genelengths table.
-
+# Convert to data.frame to have row names. data.table doesn't set or use rownames, ever.
+tempSent <- as.data.frame(tempSent)
+rownames(tempSent) <- tempSent$gene
+tempSent$gene <- NULL
+names(tempSent)[names(tempSent) == "width"] <- "y"
 
 # Need to do the same to add gene lengths for saltyp set. 
+geneLengthStyp <- setNames(width(stypGene), names(stypGene))
+tmpLenStyp <- data.table(geneLengthStyp)
+tmpLenStyp$gene <- names(geneLengthStyp)
+colnames(tmpLenStyp)[colnames(tmpLenStyp)=="geneLengthStyp"] <- "width"
+tmpLenStyp <- na.omit(tmpLenStyp) # remove rows with no width or no locus tag
+length(tmpLenStyp$gene)
+# [1] 4678 # This is the number for genes-width pairs in the table
+length(unique(tmpLenStyp$gene))
+# [1] 44678 # This is the number of unique genes in the table
 
+tempStyp <- data.frame(countsStyp)
+colnames(tempStyp) <- colnames(countsStyp)
+tempStyp$gene <- rownames(tempStyp)
+tempStyp$width <- rownames(tempStyp)
+tempStyp <- as.data.table(tempStyp)
 
-# Until issue with gene length is solved (above), can't do rpkm normalized to gene length here.
-# rpkm edgeR Salent rna-seq:
-summary(temp2sent)
+# Match gene width to gene name/locus_tag in the counts table:
+setkey(tempStyp, width)
+setkey(tmpLenStyp, gene)
+tempStyp[tmpLenStyp, width := width]
+tempStyp[, `width` := as.integer(`width`)] # Converts width column to integer (character was required to match keys)
+
+# Convert to data.frame to have row names. data.table doesn't set or use rownames, ever.
+tempStyp <- as.data.frame(tempStyp)
+rownames(tempStyp) <- tempStyp$gene
+tempStyp$gene <- NULL
+names(tempStyp)[names(tempStyp) == "width"] <- "y"
+
+# Write the counts tables with the gene width columns:
+write.table(tempSent, file = file.path(sharedPathAn, "sent_counts_wGeneWidth_readDGE_TopHat.annotated.csv"),
+            sep = ",", row.names = TRUE, col.names = NA, quote = FALSE) 
+
+write.table(tempStyp, file = file.path(sharedPathAn, "styp_counts_wGeneWidth_readDGE_TopHat.annotated.csv"),
+            sep = ",", row.names = TRUE, col.names = NA, quote = FALSE) 
+```
+
+Add column for gene names, to get an idea of function:
+```{r}
+library(Biostrings)
+sentFa <- readDNAStringSet(salenRefPath)
+sentGff <- rtracklayer::import(salengff3Path)
+sentGffGene <- sentGff[values(sentGff)[,"type"]=="gene"]
+sentGene <- DNAStringSet(Views(sentFa[[1]], IRanges(start(sentGffGene), end(sentGffGene))))
+names(sentGene) <- values(sentGffGene)[,"locus_tag"]
+
+stypFa <- readDNAStringSet(saltyRefPath)
+stypGff <- import(saltygff3Path)
+stypGffGene <- stypGff[values(stypGff)[,"type"]=="gene"]
+stypGene <- DNAStringSet(Views(stypFa[[1]], IRanges(start(stypGffGene), end(stypGffGene))))
+names(stypGene) <- values(stypGffGene)[,"locus_tag"]
+
+```
+Until issue with gene length is solved (above), can't do rpkm normalized to gene length here.
+rpkm edgeR Salent rna-seq:
+```{r}
+summary(tempSent)
 library("edgeR")
-salent_rpkmCount <- rpkm(temp2sent[,1:4], # All columns except y which is col 5
-                         gene.length = temp2sent$y, normalized.lib.sizes = TRUE)
+salent_rpkmCount <- rpkm(tempSent[,1:12], # All columns except y which is col 13
+                         gene.length = tempSent$y, normalized.lib.sizes = TRUE)
 salent_rpkmCount[1:5,]
 
 # rpkm edgeR Salty rna-seq:
-summary(temp2styp)
+summary(tempStyp)
 library("edgeR")
-saltyp_rpkmCount <- rpkm(temp2styp[,1:4], # All columns except y which is col 5
-                         gene.length = temp2styp$y, normalized.lib.sizes = TRUE)
+saltyp_rpkmCount <- rpkm(tempStyp[,1:12], # All columns except y which is col 13
+                         gene.length = tempStyp$y, normalized.lib.sizes = TRUE)
 saltyp_rpkmCount[1:5,]
 ```
 
-# Note - below chunk uses normalization based on rpkm AND cpm - whcih we can't do until the genelength duplicate issue is solved (previous chunk)
+# Note - below chunk uses normalization based on rpkm AND cpm - which we can't do until the genelength duplicate issue is solved (previous chunk)
 Setting up for Differential Analysis: 
 Counts per million (cpm) from the gene counts from TopHat: 
 ```{r}
 library("reshape2")
 # For both Sent and Styp:
 metadataColsToMerge <- c("LibraryName", "FilenamePrefix", "Condition", "Replicate", "ExpUnit") 
+#metadataColsToMerge <- c("ExpUnit") 
 condition <- c("ko342", "ko42", "ko8", "control")
 
 # For Sent:
-countsRawSent <- salent_rpkmCount[,1:4] # instead of temp2Sent
+countsRawSent <- salent_rpkmCount[,1:12] # instead of tempSent
 cpmsSent <- cpm(countsRawSent) # counts per million
 countsForBarPlotsSent <- melt(cpmsSent, id.vars = colnames(cpmsSent))
 colnames(countsForBarPlotsSent)[1] <- "SequenceID"
-colnames(countsForBarPlotsSent)[2] <- "ExpUnit"
+#colnames(countsForBarPlotsSent)[2] <- "ExpUnit"
+colnames(countsForBarPlotsSent)[2] <- "FilenamePrefix"
 colnames(countsForBarPlotsSent)[3] <- "Read_Counts"
 countsSent <- merge(countsForBarPlotsSent, unique(metadataRawPairs[,c(metadataColsToMerge)]),  
-                    by = "ExpUnit", all.x = TRUE)
+                    by = "FilenamePrefix", all.x = TRUE)
 countsSent$Condition <- factor(countsSent$Condition, levels = c(condition))
 length(unique(countsSent$Condition))
 countsSent[1:5,]
 
 # For Styp:
-countsRawStyp <- saltyp_rpkmCount[,1:4] # instead of temp2Styp
+countsRawStyp <- saltyp_rpkmCount[,1:12] # instead of tempStyp
 cpmsStyp <- cpm(countsRawStyp) # counts per million
 countsForBarPlotsStyp <- melt(cpmsStyp, id.vars = colnames(cpmsStyp))
 colnames(countsForBarPlotsStyp)[1] <- "SequenceID"
-colnames(countsForBarPlotsStyp)[2] <- "ExpUnit"
+#colnames(countsForBarPlotsStyp)[2] <- "ExpUnit"
+colnames(countsForBarPlotsStyp)[2] <- "FilenamePrefix"
 colnames(countsForBarPlotsStyp)[3] <- "Read_Counts"
 countsStyp <- merge(countsForBarPlotsStyp, unique(metadataRawPairs[,c(metadataColsToMerge)]),  
-                    by = "ExpUnit", all.x = TRUE)
+                    by = "FilenamePrefix", all.x = TRUE)
 countsStyp$Condition <- factor(countsStyp$Condition, levels = c(condition))
 length(unique(countsStyp$Condition))
 countsStyp[1:5,]
